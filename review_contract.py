@@ -4,13 +4,31 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 FindingSeverity = Literal["critical", "high", "medium", "low"]
+FileStatus = Literal[
+    "added",
+    "modified",
+    "deleted",
+    "renamed",
+    "copied",
+    "type_changed",
+    "unmerged",
+    "unknown",
+]
+
+
+@dataclass(frozen=True)
+class ChangedFile:
+    path: str
+    status: FileStatus
+    old_path: str | None = None
+    is_binary: bool = False
 
 
 @dataclass(frozen=True)
 class SanitizedReviewInput:
     project_context: str
     pr_summary: str
-    changed_files: list[str]
+    changed_files: list[ChangedFile]
     diff: str
     rules: list[str]
 

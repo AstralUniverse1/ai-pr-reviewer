@@ -1,16 +1,45 @@
-from llm_client import call_llm
-from sanitizer import sanitize_review_input
+from __future__ import annotations
 
-sample_input = sanitize_review_input(
-    project_context="Flask banking API.",
-    pr_summary="Added transfer-money endpoint validation.",
-    changed_files=["backend/routes/transfer.py"],
-    diff="""
-+ reject negative transfer amounts
-+ added insufficient funds validation
-""",
-)
+import argparse
+import json
+import sys
+from dataclasses import asdict
 
-result = call_llm("qa_review", sample_input)
+from review_runner import dry_run_local, run_local_review
+from sanitizer import render_review_input
 
-print(result)
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run a local AI PR review.")
+    parser.add_argument("--repo-path", default=".")
+    parser.add_argument("--project-context", required=True)
+    parser.add_argument("--pr-summary", required=True)
+    parser.add_argument("--prompt", default="qa_review")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    try:
+        if args.dry_run:
+            sanitized_input = dry_run_local(
+                repo_path=args.repo_path,
+                project_context=args.project_context,
+                pr_summary=args.pr_summary,
+            )
+            print(render_review_input(sanitized_input))
+            return 0
+
+        result = run_local_review(
+            repo_path=args.repo_path,
+            project_context=args.project_context,
+            pr_summary=args.pr_summary,
+            prompt_name=args.prompt,
+        )
+        print(json.dumps(asdict(result), indent=2, sort_keys=True))
+        return 0
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

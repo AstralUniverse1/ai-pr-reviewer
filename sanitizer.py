@@ -4,7 +4,7 @@ import json
 import re
 
 from config import MAX_INPUT_CHARS
-from review_contract import SanitizedReviewInput
+from review_contract import ChangedFile, FileStatus, SanitizedReviewInput
 
 DEFAULT_REVIEW_RULES = [
     "Use only the provided sanitized input.",
@@ -29,7 +29,7 @@ def sanitize_review_input(
     *,
     project_context: str,
     pr_summary: str,
-    changed_files: list[str],
+    changed_files: list[ChangedFile],
     diff: str,
     rules: list[str] | None = None,
 ) -> SanitizedReviewInput:
@@ -58,23 +58,65 @@ def _clean_text(value: str) -> str:
     return cleaned.strip()
 
 
-def _clean_changed_files(changed_files: list[str]) -> list[str]:
+def _clean_changed_files(changed_files: list[ChangedFile]) -> list[ChangedFile]:
     if not isinstance(changed_files, list):
-        raise TypeError("changed_files must be a list of strings")
+        raise TypeError("changed_files must be a list of ChangedFile objects")
 
     result = []
     seen = set()
-    for path in changed_files:
-        cleaned = _clean_text(path)
-        if not cleaned or cleaned in seen:
+    for changed_file in changed_files:
+        if not isinstance(changed_file, ChangedFile):
+            raise TypeError("changed_files must contain ChangedFile objects")
+
+        cleaned_path = _clean_path(changed_file.path)
+        if not cleaned_path or cleaned_path in seen:
             continue
-        if cleaned.startswith("/") or ".." in cleaned.split("/"):
-            continue
-        if not SAFE_FILE_PATH.match(cleaned):
-            continue
-        seen.add(cleaned)
-        result.append(cleaned)
+
+        cleaned_old_path = None
+        if changed_file.old_path is not None:
+            cleaned_old_path = _clean_path(changed_file.old_path)
+            if cleaned_old_path is None:
+                continue
+
+        status = _clean_status(changed_file.status)
+        is_binary = bool(changed_file.is_binary)
+        result.append(
+            ChangedFile(
+                path=cleaned_path,
+                status=status,
+                old_path=cleaned_old_path,
+                is_binary=is_binary,
+            )
+        )
+        seen.add(cleaned_path)
     return result
+
+
+def _clean_path(path: str) -> str | None:
+    cleaned = _clean_text(path)
+    if not cleaned:
+        return None
+    if cleaned.startswith("/") or ".." in cleaned.split("/"):
+        return None
+    if not SAFE_FILE_PATH.match(cleaned):
+        return None
+    return cleaned
+
+
+def _clean_status(status: str) -> FileStatus:
+    allowed = {
+        "added",
+        "modified",
+        "deleted",
+        "renamed",
+        "copied",
+        "type_changed",
+        "unmerged",
+        "unknown",
+    }
+    if status not in allowed:
+        return "unknown"
+    return status
 
 
 def _clean_rules(rules: list[str]) -> list[str]:

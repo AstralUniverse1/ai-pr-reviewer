@@ -5,16 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-FileStatus = Literal[
-    "added",
-    "modified",
-    "deleted",
-    "renamed",
-    "copied",
-    "type_changed",
-    "unmerged",
-    "unknown",
-]
+from review_contract import ChangedFile, FileStatus
 
 DiffMode = Literal["local", "refs"]
 
@@ -44,14 +35,6 @@ STATUS_MAP: dict[str, FileStatus] = {
 
 class GitDiffError(RuntimeError):
     pass
-
-
-@dataclass(frozen=True)
-class ChangedFile:
-    path: str
-    status: FileStatus
-    old_path: str | None = None
-    is_binary: bool = False
 
 
 @dataclass(frozen=True)

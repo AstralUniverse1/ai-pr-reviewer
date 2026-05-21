@@ -1,12 +1,12 @@
 import unittest
 
 from git_diff import (
-    ChangedFile,
     GitDiffError,
     _binary_paths_from_diff,
     _merge_changed_files,
     parse_name_status_z,
 )
+from review_contract import ChangedFile
 
 
 class GitDiffParserTests(unittest.TestCase):
