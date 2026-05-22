@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       GITHUB_TOKEN: ${{ github.token }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PROJECT_CONTEXT: Secure AI-assisted GitHub PR reviewer. Comment-only MVP. AI receives sanitized diff and metadata only.
@@ -36,6 +37,21 @@ jobs:
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+
+      - name: Validate workflow environment
+        run: |
+          test -n "$GITHUB_TOKEN" || { echo "::error::GITHUB_TOKEN is not available"; exit 1; }
+          test -n "$OPENAI_API_KEY" || { echo "::error::OPENAI_API_KEY secret is not available"; exit 1; }
+
+      - name: Validate sanitized review input
+        run: >-
+          python main.py
+          --github
+          --dry-run
+          --repo-path .
+          --project-context "$PROJECT_CONTEXT"
+          --pr-summary "$PR_SUMMARY"
+          >/tmp/ai-pr-review-input.json
 
       - name: Run AI PR review
         run: >-
