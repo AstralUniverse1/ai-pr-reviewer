@@ -24,7 +24,7 @@ jobs:
       - name: Checkout trusted reviewer code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
 
       - name: Fetch PR head for diff only

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Mapping
 
 from git_diff import GitDiffResult, get_local_working_tree_diff, get_ref_diff
@@ -59,21 +60,28 @@ def run_github_review(
     token: str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
+    print("ai-pr-reviewer: loading GitHub PR context", file=sys.stderr)
     context = load_github_pull_request_context(env)
+    print("ai-pr-reviewer: collecting PR diff", file=sys.stderr)
+    diff_result = _get_github_diff(repo_path, context)
+    print("ai-pr-reviewer: calling OpenAI review model", file=sys.stderr)
     review_output = run_review_for_diff(
-        diff_result=_get_github_diff(repo_path, context),
+        diff_result=diff_result,
         project_context=project_context,
         pr_summary=pr_summary,
         prompt_name=prompt_name,
     )
     github_token = token if token is not None else os.environ.get("GITHUB_TOKEN", "")
-    return _post_review_comment(
+    print("ai-pr-reviewer: posting GitHub PR comment", file=sys.stderr)
+    result = _post_review_comment(
         owner=context.repo_owner,
         repo=context.repo_name,
         pr_number=context.pr_number,
         review_output=review_output,
         token=github_token,
     )
+    print("ai-pr-reviewer: posted GitHub PR comment", file=sys.stderr)
+    return result
 
 
 def dry_run_for_diff(
