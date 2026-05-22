@@ -19,7 +19,9 @@ class ReviewRunnerTests(unittest.TestCase):
 
         result = dry_run_for_diff(diff_result, "ctx", "summary")
 
-        self.assertEqual(result.changed_files, [ChangedFile(path="app.py", status="modified")])
+        self.assertEqual(result.changed_files[0].path, "app.py")
+        self.assertEqual(result.changed_files[0].status, "modified")
+        self.assertEqual(result.changed_files[0].file_category, "source")
         self.assertEqual(result.diff, "+ [REDACTED]")
 
     def test_run_review_for_diff_calls_llm_with_sanitized_input(self):

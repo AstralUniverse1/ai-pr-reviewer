@@ -14,6 +14,7 @@ FileStatus = Literal[
     "unmerged",
     "unknown",
 ]
+FileCategory = Literal["source", "test", "config", "ci", "docs", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -25,12 +26,47 @@ class ChangedFile:
 
 
 @dataclass(frozen=True)
+class SanitizedChangedFile:
+    path: str
+    status: FileStatus
+    old_path: str | None = None
+    is_binary: bool = False
+    added_lines: int = 0
+    deleted_lines: int = 0
+    extension: str = ""
+    file_category: FileCategory = "unknown"
+    is_test_file: bool = False
+    is_ci_file: bool = False
+    is_security_sensitive_path: bool = False
+
+
+@dataclass(frozen=True)
+class DiffStats:
+    total_files_changed: int
+    total_added_lines: int
+    total_deleted_lines: int
+    input_truncated: bool
+
+
+@dataclass(frozen=True)
+class ReviewHints:
+    touched_tests: bool
+    touched_source_without_tests: bool
+    requirements_changed: bool
+    workflow_changed: bool
+    possible_missing_test_coverage: list[str]
+
+
+@dataclass(frozen=True)
 class SanitizedReviewInput:
     project_context: str
     pr_summary: str
-    changed_files: list[ChangedFile]
+    changed_files: list[SanitizedChangedFile]
     diff: str
     rules: list[str]
+    diff_stats: DiffStats
+    review_hints: ReviewHints
+    project_rules: list[str]
 
     def to_model_payload(self) -> dict[str, Any]:
         return asdict(self)
