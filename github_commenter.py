@@ -111,6 +111,71 @@ def post_pr_comment(
     return parsed
 
 
+def list_issue_comments(
+    owner: str,
+    repo: str,
+    pr_number: int,
+    token: str,
+) -> list[dict[str, object]]:
+    owner = _required_text(owner, "owner")
+    repo = _required_text(repo, "repo")
+    token = _required_text(token, "token")
+    if not isinstance(pr_number, int) or pr_number < 1:
+        raise GitHubCommentError("pr_number must be a positive integer")
+
+    comments: list[dict[str, object]] = []
+    page = 1
+    while True:
+        url = (
+            f"{GITHUB_API_BASE_URL}/repos/{owner}/{repo}/issues/{pr_number}/comments"
+            f"?per_page=100&page={page}"
+        )
+        parsed = _github_get_json(url, token=token, purpose="comments")
+        if not isinstance(parsed, list):
+            raise GitHubCommentError("GitHub comments response had an unexpected shape")
+        comments.extend(item for item in parsed if isinstance(item, dict))
+        if len(parsed) < 100:
+            return comments
+        page += 1
+        if page > 10:
+            return comments
+
+
+def _github_get_json(url: str, *, token: str, purpose: str) -> object:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": USER_AGENT,
+            "X-GitHub-Api-Version": GITHUB_API_VERSION,
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            status = response.status
+            response_body = response.read()
+    except urllib.error.HTTPError as exc:
+        detail = _safe_response_excerpt(exc.read())
+        raise GitHubCommentError(
+            f"GitHub {purpose} request failed with status {exc.code}: {detail}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise GitHubCommentError(f"GitHub {purpose} request failed due to a network error") from exc
+    except OSError as exc:
+        raise GitHubCommentError(f"GitHub {purpose} request failed") from exc
+
+    if status < 200 or status >= 300:
+        raise GitHubCommentError(f"GitHub {purpose} request failed with status {status}")
+
+    try:
+        return json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GitHubCommentError(f"GitHub {purpose} response was not valid JSON") from exc
+
+
 def post_review_comment(
     owner: str,
     repo: str,

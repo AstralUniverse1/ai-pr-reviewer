@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from review_contract import ChangedFile
+from review_contract import ChangedFile, ConversationComment
 from sanitizer import render_review_input, sanitize_review_input
 
 
@@ -70,6 +70,8 @@ class SanitizerTests(unittest.TestCase):
         result = sanitize_review_input(
             project_context="ctx api_key=secret",
             pr_summary="summary",
+            pr_description="body password=secret",
+            project_rules=["Prefer tests for auth token=abc123"],
             changed_files=[ChangedFile(path="app.py", status="modified")],
             diff="+ token=abc123",
         )
@@ -80,9 +82,52 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"][0]["file_category"], "source")
         self.assertEqual(payload["diff_stats"]["total_files_changed"], 1)
         self.assertEqual(payload["review_hints"]["possible_missing_test_coverage"], ["app.py"])
-        self.assertIn("pull_request_target", " ".join(payload["project_rules"]))
+        self.assertIn("pull_request_target", " ".join(payload["reviewer_safety_rules"]))
+        self.assertEqual(payload["project_rules"], ["Prefer tests for auth [REDACTED]"])
         self.assertEqual(payload["project_context"], "ctx [REDACTED]")
+        self.assertEqual(payload["pr_description"], "body [REDACTED]")
         self.assertEqual(payload["diff"], "+ [REDACTED]")
+        self.assertEqual(payload["conversation"]["comments"], [])
+
+    def test_sanitizes_conversation_and_preserves_full_comments_only(self):
+        comments = [
+            ConversationComment(
+                author="alice",
+                author_type="MEMBER",
+                created_at="2026-05-31T00:00:00Z",
+                body="/ai-reviewer small token=abc123",
+            ),
+            ConversationComment(
+                author="bob",
+                author_type="MEMBER",
+                created_at="2026-05-31T00:01:00Z",
+                body="/ai-reviewer " + "x" * 500,
+            ),
+            ConversationComment(
+                author="github-actions[bot]",
+                author_type="NONE",
+                created_at="2026-05-31T00:02:00Z",
+                body="## AI PR Review\nlatest",
+                is_bot=True,
+                is_triggering=True,
+            ),
+        ]
+
+        with patch("sanitizer.MAX_CONVERSATION_CHARS", 420):
+            result = sanitize_review_input(
+                project_context="ctx",
+                pr_summary="summary",
+                changed_files=[ChangedFile(path="app.py", status="modified")],
+                diff="+ change",
+                conversation_comments=comments,
+            )
+
+        bodies = [comment.body for comment in result.conversation.comments]
+        self.assertIn("## AI PR Review\nlatest", bodies)
+        self.assertNotIn("/ai-reviewer " + "x" * 500, bodies)
+        self.assertTrue(all("[TRUNCATED]" not in body for body in bodies))
+        self.assertEqual(result.conversation.total_relevant_comments, 3)
+        self.assertGreaterEqual(result.conversation.omitted_comments, 1)
 
     def test_classifies_tests_ci_requirements_and_security_paths(self):
         result = sanitize_review_input(

@@ -5,7 +5,9 @@ from pathlib import Path
 
 from github_context import (
     GitHubContextError,
+    GitHubIssueCommentContext,
     GitHubPullRequestContext,
+    load_github_issue_comment_context,
     load_github_pull_request_context,
     ref_diff_inputs,
 )
@@ -34,9 +36,53 @@ class GitHubContextTests(unittest.TestCase):
                 head_ref="feature",
                 base_sha="base-sha",
                 head_sha="head-sha",
+                title="Add feature",
+                body="Implements the thing",
             ),
         )
         self.assertEqual(ref_diff_inputs(context), ("base-sha", "head-sha"))
+
+    def test_loads_null_pull_request_body_as_empty_string(self):
+        payload = _pull_request_payload()
+        payload["pull_request"]["body"] = None
+        with _event_file(payload) as event_path:
+            context = load_github_pull_request_context(
+                {
+                    "GITHUB_EVENT_NAME": "pull_request_target",
+                    "GITHUB_EVENT_PATH": event_path,
+                    "GITHUB_REPOSITORY": "octo-org/octo-repo",
+                }
+            )
+
+        self.assertEqual(context.body, "")
+
+    def test_loads_issue_comment_context(self):
+        with _event_file(_issue_comment_payload()) as event_path:
+            context = load_github_issue_comment_context(
+                {
+                    "GITHUB_EVENT_NAME": "issue_comment",
+                    "GITHUB_EVENT_PATH": event_path,
+                    "GITHUB_REPOSITORY": "octo-org/octo-repo",
+                }
+            )
+
+        self.assertEqual(
+            context,
+            GitHubIssueCommentContext(
+                event_name="issue_comment",
+                event_path=event_path,
+                repo_owner="octo-org",
+                repo_name="octo-repo",
+                pr_number=42,
+                comment_id=1001,
+                comment_body="/ai-reviewer please recheck",
+                comment_author="alice",
+                comment_author_type="MEMBER",
+                comment_created_at="2026-05-31T00:00:00Z",
+                comment_user_type="User",
+                is_pr=True,
+            ),
+        )
 
     def test_rejects_missing_env(self):
         with self.assertRaisesRegex(GitHubContextError, "GITHUB_EVENT_NAME"):
@@ -96,9 +142,24 @@ def _pull_request_payload():
     return {
         "pull_request": {
             "number": 42,
+            "title": "Add feature",
+            "body": "Implements the thing",
             "base": {"ref": "main", "sha": "base-sha"},
             "head": {"ref": "feature", "sha": "head-sha"},
         }
+    }
+
+
+def _issue_comment_payload():
+    return {
+        "issue": {"number": 42, "pull_request": {"url": "https://api.github.test/pr"}},
+        "comment": {
+            "id": 1001,
+            "body": "/ai-reviewer please recheck",
+            "author_association": "MEMBER",
+            "created_at": "2026-05-31T00:00:00Z",
+            "user": {"login": "alice", "type": "User"},
+        },
     }
 
 
