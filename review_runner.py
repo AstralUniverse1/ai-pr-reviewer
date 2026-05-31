@@ -18,7 +18,6 @@ from review_contract import ConversationComment, ReviewOutput, SanitizedReviewIn
 from sanitizer import sanitize_review_input
 
 AI_REVIEW_COMMAND = "/ai-reviewer"
-AI_REVIEW_COMMENT_MARKER = "## AI PR Review"
 PROJECT_RULE_PATHS = (
     ".ai-pr-reviewer.md",
     ".github/ai-pr-reviewer.md",
@@ -288,7 +287,7 @@ def _conversation_comments_for_followup(
         user_type = _comment_str(user, "type")
         is_bot = user_type == "Bot"
         is_triggering = comment.get("id") == context.comment_id
-        is_ai_review_comment = is_bot and AI_REVIEW_COMMENT_MARKER in body
+        is_ai_review_comment = is_bot and _is_ai_reviewer_comment(body)
         is_ai_tagged_human_comment = not is_bot and AI_REVIEW_COMMAND in body
         if not (is_ai_review_comment or is_ai_tagged_human_comment or is_triggering):
             continue
@@ -303,6 +302,12 @@ def _conversation_comments_for_followup(
             )
         )
     return result
+
+
+def _is_ai_reviewer_comment(body: str) -> bool:
+    from github_commenter import AI_REVIEW_COMMENT_MARKER
+
+    return AI_REVIEW_COMMENT_MARKER in body
 
 
 def _comment_str(payload, key: str) -> str:

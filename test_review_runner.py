@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from git_diff import GitDiffResult
+from github_commenter import AI_REVIEW_COMMENT_MARKER
 from github_context import GitHubIssueCommentContext, GitHubPullRequestContext
 from review_contract import ChangedFile, ReviewOutput
 from review_runner import (
@@ -122,7 +123,7 @@ class ReviewRunnerTests(unittest.TestCase):
             repo_owner="octo-org",
             repo_name="octo-repo",
             pr_number=42,
-            comment_id=3,
+            comment_id=4,
             comment_body="/ai-reviewer please recheck",
             comment_author="alice",
             comment_author_type="MEMBER",
@@ -139,9 +140,10 @@ class ReviewRunnerTests(unittest.TestCase):
             mode="refs",
         )
         comments = [
-            _comment(1, "github-actions[bot]", "Bot", "NONE", "## AI PR Review\nold"),
-            _comment(2, "bob", "User", "MEMBER", "unrelated"),
-            _comment(3, "alice", "User", "MEMBER", "/ai-reviewer please recheck"),
+            _comment(1, "github-actions[bot]", "Bot", "NONE", "## AI PR Review\nheading only"),
+            _comment(2, "github-actions[bot]", "Bot", "NONE", f"{AI_REVIEW_COMMENT_MARKER}\n## AI PR Review\nold"),
+            _comment(3, "bob", "User", "MEMBER", "unrelated"),
+            _comment(4, "alice", "User", "MEMBER", "/ai-reviewer please recheck"),
         ]
         review_output = ReviewOutput(summary="ok", findings=[], questions=[])
 
@@ -162,7 +164,8 @@ class ReviewRunnerTests(unittest.TestCase):
         self.assertEqual(result, {"id": 321})
         sanitized_input = call_llm.call_args.args[1]
         bodies = [comment.body for comment in sanitized_input.conversation.comments]
-        self.assertEqual(bodies, ["## AI PR Review\nold", "/ai-reviewer please recheck"])
+        self.assertEqual(bodies, [f"{AI_REVIEW_COMMENT_MARKER}\n## AI PR Review\nold", "/ai-reviewer please recheck"])
+        self.assertNotIn("## AI PR Review\nheading only", bodies)
         self.assertTrue(sanitized_input.conversation.comments[1].is_triggering)
 
     def test_run_github_followup_skips_bot_trigger(self):

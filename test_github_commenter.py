@@ -5,6 +5,7 @@ from io import BytesIO
 from unittest.mock import patch
 
 from github_commenter import (
+    AI_REVIEW_COMMENT_MARKER,
     GITHUB_API_VERSION,
     MAX_COMMENT_BODY_CHARS,
     TRUNCATION_MARKER,
@@ -21,7 +22,7 @@ class FormatReviewCommentTests(unittest.TestCase):
             ReviewOutput(summary="Looks fine", findings=[], questions=[])
         )
 
-        self.assertIn("## AI PR Review", body)
+        self.assertTrue(body.startswith(AI_REVIEW_COMMENT_MARKER + "\n## AI PR Review"))
         self.assertIn("**Summary:** Looks fine", body)
         self.assertIn("No findings.", body)
 

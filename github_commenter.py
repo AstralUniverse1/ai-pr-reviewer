@@ -14,6 +14,7 @@ GITHUB_API_VERSION = "2022-11-28"
 USER_AGENT = "ai-pr-reviewer"
 MAX_COMMENT_BODY_CHARS = 20_000
 TRUNCATION_MARKER = "\n\n_Comment truncated by ai-pr-reviewer._"
+AI_REVIEW_COMMENT_MARKER = "<!-- ai-pr-reviewer:comment:v1 -->"
 
 MENTION_PATTERN = re.compile(r"@(?=[A-Za-z0-9][A-Za-z0-9-]{0,38}\b)")
 
@@ -24,6 +25,7 @@ class GitHubCommentError(RuntimeError):
 
 def format_review_comment(review_output: ReviewOutput) -> str:
     sections = [
+        AI_REVIEW_COMMENT_MARKER,
         "## AI PR Review",
         "",
         f"**Summary:** {_safe_text(review_output.summary)}",
