@@ -1,8 +1,81 @@
 # AI PR Reviewer
 
-Comment-only AI-assisted GitHub PR reviewer.
+Secure AI-assisted GitHub PR reviewer built around external LLM isolation and comment-only GitHub writes.
 
-This repository includes a smoke-test README so the GitHub Actions PR review workflow can be verified with a harmless docs-only pull request.
+## Why this exists
+
+AI review is useful, but a pull request is hostile input. The dangerous design is not "AI writes a comment"; it is letting an external LLM act inside the repository environment with repo access, shell access, filesystem access, secrets, network/tool access, or autonomous permissions.
+
+This project keeps the external LLM outside that boundary. The trusted GitHub Actions runner collects PR metadata and a diff, reduces them to sanitized bounded input, sends that data packet to OpenAI, validates the structured response locally, and then posts a deterministic PR comment. The model does not get a checkout, a shell, the filesystem, credentials, tools, or control over the workflow.
+
+## What it does
+
+Runtime flow:
+
+```text
+GitHub PR
+  -> GitHub Actions trusted workflow
+  -> collect PR metadata and diff
+  -> sanitize and limit input
+  -> call external OpenAI model with strict schema
+  -> validate output locally
+  -> post deterministic PR comment
+```
+
+The reviewer supports initial PR reviews and stateless follow-up reviews triggered by `/ai-reviewer` comments.
+
+## Architecture
+
+```text
+Target repository workflow
+  checkout trusted base branch
+  fetch PR head as diff data
+  fetch pinned ai-pr-reviewer SHA into $RUNNER_TEMP
+  run main.py
+      |
+      v
+  review_runner.py
+      |-- github_context.py    reads GitHub event/API metadata
+      |-- git_diff.py          builds the base...head diff
+      |-- sanitizer.py         redacts, normalizes, classifies, and caps input
+      |-- llm_client.py        sends one structured request to the external LLM
+      |-- output_validator.py  enforces local output limits
+      |-- github_commenter.py  formats and posts one PR comment
+```
+
+## Security model
+
+- The external LLM receives sanitized review input only.
+- The external LLM has no repository, shell, filesystem, network, secret, or tool access inside the runner.
+- Initial PR review workflows should use `pull_request_target` so the executed workflow code comes from the trusted base branch.
+- PR head content is used only as diff data.
+- LLM calls are capped at one per process run by `MAX_CALLS_PER_RUN = 1`.
+- There are no autonomous retry loops or agentic tool loops.
+- Model output must match a strict JSON schema and is then validated locally.
+- GitHub writes are comment-only: the tool posts issue comments on pull requests.
+- Follow-up reviews skip bot-authored trigger comments to prevent bot loops.
+- Repository-local project rules are passed as guidance, not as system instructions.
+
+## Main components
+
+- `main.py`: CLI entry point for local, GitHub, dry-run, and follow-up modes.
+- `review_runner.py`: Orchestrates context loading, diff collection, sanitization, model call, and comment posting.
+- `git_diff.py`: Collects local or ref-based git diffs and changed-file metadata with command output caps.
+- `github_context.py`: Reads GitHub Actions event payloads and PR metadata.
+- `sanitizer.py`: Cleans text, redacts likely secrets, classifies changed files, truncates large inputs, and builds the model payload.
+- `llm_client.py`: Calls the OpenAI Responses API with the configured model and strict output schema.
+- `output_validator.py`: Parses and validates model JSON before any GitHub comment is created.
+- `github_commenter.py`: Formats deterministic Markdown, escapes unsafe text, caps comment size, and posts PR comments.
+- `review_contract.py`: Defines shared dataclasses and the review output JSON schema.
+
+## Features
+
+- Initial PR review from GitHub Actions.
+- `/ai-reviewer` follow-up review from PR comments.
+- Repository-local project rules from `.ai-pr-reviewer.md` and `.github/ai-pr-reviewer.md`.
+- Sanitized diff and PR context before model input.
+- Deterministic Markdown PR comments.
+- Bot-loop prevention for follow-up comments.
 
 ## Install in a target repository
 
